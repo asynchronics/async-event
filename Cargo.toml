@@ -1,0 +1,23 @@
+[package]
+name = "async-event"
+# When incrementing version and releasing to crates.io:
+# - Update crate version in README.md
+# - Update CHANGELOG.md
+# - Update if necessary copyright notice in LICENSE-MIT
+# - Create a "vX.Y.Z" git tag
+version = "0.1.0-pre1"
+authors = ["Serge Barral <serge.barral@asynchronics.com>"]
+edition = "2021"
+rust-version = "1.56"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/asynchronics/async-event"
+readme = "README.md"
+description = """
+An efficient async condition variable for lock-free algorithms.
+"""
+categories = ["asynchronous", "concurrency"]
+keywords = ["async", "event", "atomic", "futures"]
+
+[target.'cfg(async_event_loom)'.dependencies]
+waker-fn = "1.1"
+loom = "0.5"

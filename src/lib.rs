@@ -936,11 +936,12 @@ mod tests {
     }
 
     /// Make a certain amount of tokens available and notify as many waiters
-    /// among all registered waiters. Optionally, it is possible to:
+    /// among all registered waiters, possibly from several notifier threads.
+    /// Optionally, it is possible to:
     /// - request that `max_spurious_wake` threads will simulate a spurious
     ///   wake-up if the waiter is polled and returns `Poll::Pending`,
-    /// - request that `max_cancellations` threads will cancel the waiter if
-    ///   the waiter is polled and returns `Poll::Pending`,
+    /// - request that `max_cancellations` threads will cancel the waiter if the
+    ///   waiter is polled and returns `Poll::Pending`,
     /// - change the waker each time it is polled.
     ///
     /// Note that the aggregate number of specified cancellations and spurious
@@ -948,6 +949,7 @@ mod tests {
     fn loom_notify(
         token_count: usize,
         waiter_count: usize,
+        notifier_count: usize,
         max_spurious_wake: usize,
         max_cancellations: usize,
         change_waker: bool,
@@ -1036,12 +1038,35 @@ mod tests {
 
             // Increment the token count and notify a consumer after each
             // increment.
-            for _ in 0..token_count {
+            assert!(notifier_count >= 1);
+            assert!(token_count >= notifier_count);
+
+            // Each notifier thread but the last one makes one and only one
+            // token available.
+            let notifier_threads: Vec<_> = (0..(notifier_count - 1))
+                .map(|_| {
+                    let token_counter = token_counter.clone();
+                    let event = event.clone();
+                    thread::spawn(move || {
+                        token_counter.increment();
+                        event.notify(1);
+                    })
+                })
+                .collect();
+
+            // The last notifier thread completes the number of tokens as
+            // needed.
+            for _ in 0..(token_count - (notifier_count - 1)) {
                 token_counter.increment();
                 event.notify(1);
             }
 
-            // Join all threads and check which of them have successfully
+            // Join the remaining notifier threads.
+            for th in notifier_threads {
+                th.join().unwrap();
+            }
+
+            // Join all waiter threads and check which of them have successfully
             // checked the predicate. It is important that all `FutureState`
             // returned by the threads be kept alive until _all_ threads have
             // joined because `FutureState::Polled` items extend the lifetime of
@@ -1101,81 +1126,91 @@ mod tests {
     #[test]
     fn loom_two_consumers() {
         const DEFAULT_PREEMPTION_BOUND: usize = 4;
-        loom_notify(2, 2, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 2, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_two_consumers_spurious() {
         const DEFAULT_PREEMPTION_BOUND: usize = 4;
-        loom_notify(2, 2, 1, 0, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 2, 1, 1, 0, false, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_two_consumers_cancellation() {
         const DEFAULT_PREEMPTION_BOUND: usize = 4;
-        loom_notify(2, 2, 1, 1, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 2, 1, 1, 1, false, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_two_consumers_change_waker() {
         const DEFAULT_PREEMPTION_BOUND: usize = 4;
-        loom_notify(2, 2, 0, 0, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 2, 1, 0, 0, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_two_consumers_change_waker_spurious() {
         const DEFAULT_PREEMPTION_BOUND: usize = 4;
-        loom_notify(2, 2, 1, 0, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 2, 1, 1, 0, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_two_consumers_change_waker_cancellation() {
         const DEFAULT_PREEMPTION_BOUND: usize = 4;
-        loom_notify(1, 2, 0, 1, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(1, 2, 1, 0, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_two_consumers_change_waker_spurious_cancellation() {
         const DEFAULT_PREEMPTION_BOUND: usize = 4;
-        loom_notify(2, 2, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 2, 1, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_two_consumers_three_tokens() {
         const DEFAULT_PREEMPTION_BOUND: usize = 3;
-        loom_notify(3, 2, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(3, 2, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(3, 3, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(3, 3, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers_spurious() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(3, 3, 1, 0, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(3, 3, 1, 1, 0, false, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers_cancellation() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(2, 3, 0, 1, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 3, 1, 0, 1, false, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers_change_waker() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(3, 3, 0, 0, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(3, 3, 1, 0, 0, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers_change_waker_spurious() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(3, 3, 1, 0, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(3, 3, 1, 1, 0, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers_change_waker_cancellation() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(3, 3, 0, 1, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(3, 3, 1, 0, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers_change_waker_spurious_cancellation() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(3, 3, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(3, 3, 1, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
     fn loom_three_consumers_two_tokens() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
-        loom_notify(2, 3, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
+        loom_notify(2, 3, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
+    }
+    #[test]
+    fn loom_two_consumers_two_notifiers() {
+        const DEFAULT_PREEMPTION_BOUND: usize = 3;
+        loom_notify(2, 2, 2, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
+    }
+    #[test]
+    fn loom_one_consumer_three_notifiers() {
+        const DEFAULT_PREEMPTION_BOUND: usize = 4;
+        loom_notify(3, 1, 3, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }
 }

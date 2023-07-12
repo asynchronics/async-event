@@ -15,7 +15,7 @@ predicate is satisfied by checking the predicate each time it receives a
 notification.
 
 While functionally similar to the [event_listener] crate, this implementation is
-limited to the `async` case but tries to be more efficient by limiting the
+specialized for the `async` case and tries to be more efficient by limiting the
 number of locking operations on the mutex-protected list of notifiers: the lock
 is typically taken only once for each time a waiter is blocked and once for
 notifying, thus reducing the need for synchronization operations. Finally,
@@ -35,7 +35,7 @@ your own risk by adding this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-async-event = { git = "https://github.com/asynchronics/async-event/regex.git" }
+async-event = { git = "https://github.com/asynchronics/async-event.git" }
 ```
 
 ## Example
@@ -99,7 +99,7 @@ impl Sender {
             })
             .await;
 
-        // Let one of the blocked receiver (if any) know that a value is
+        // Let one of the blocked receivers (if any) know that a value is
         // available.
         self.inner.receiver_notifier.notify(1);
     }
@@ -116,7 +116,7 @@ impl Receiver {
             .wait_until(|| NonZeroUsize::new(self.inner.value.swap(0, Ordering::Relaxed)))
             .await;
 
-        // Let one of the blocked sender (if any) know that the value slot is
+        // Let one of the blocked senders (if any) know that the value slot is
         // empty.
         self.inner.sender_notifier.notify(1);
 

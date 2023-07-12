@@ -85,7 +85,7 @@
 //!             })
 //!             .await;
 //!
-//!         // Let one of the blocked receiver (if any) know that a value is
+//!         // Let one of the blocked receivers (if any) know that a value is
 //!         // available.
 //!         self.inner.receiver_notifier.notify(1);
 //!     }
@@ -102,7 +102,7 @@
 //!             .wait_until(|| NonZeroUsize::new(self.inner.value.swap(0, Ordering::Relaxed)))
 //!             .await;
 //!
-//!         // Let one of the blocked sender (if any) know that the value slot is
+//!         // Let one of the blocked senders (if any) know that the value slot is
 //!         // empty.
 //!         self.inner.sender_notifier.notify(1);
 //!

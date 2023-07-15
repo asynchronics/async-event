@@ -18,6 +18,9 @@ An efficient async condition variable for lock-free algorithms.
 categories = ["asynchronous", "concurrency"]
 keywords = ["async", "event", "atomic", "futures"]
 
+[dev-dependencies]
+futures-executor = "0.3"
+
 [target.'cfg(async_event_loom)'.dependencies]
 waker-fn = "1.1"
 loom = "0.5"

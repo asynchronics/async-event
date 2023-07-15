@@ -158,6 +158,18 @@ impl Event {
         }
     }
 
+    /// Notify one awaiting event (if any) that the predicate should be checked.
+    #[inline(always)]
+    pub fn notify_one(&self) {
+        self.notify(1);
+    }
+
+    /// Notify all awaiting events that the predicate should be checked.
+    #[inline(always)]
+    pub fn notify_all(&self) {
+        self.notify(usize::MAX);
+    }
+
     /// Returns a future that can be `await`ed until the provided predicate is
     /// satisfied.
     pub fn wait_until<F: FnMut() -> Option<T>, T>(&self, predicate: F) -> WaitUntil<F, T> {
@@ -725,6 +737,174 @@ impl List {
     }
 }
 
+/// Non-loom tests.
+#[cfg(all(test, not(async_event_loom)))]
+mod tests {
+    use super::*;
+
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    use std::thread;
+
+    use futures_executor::block_on;
+
+    #[test]
+    fn smoke() {
+        static SIGNAL: AtomicBool = AtomicBool::new(false);
+
+        let event = Arc::new(Event::new());
+
+        let th_recv = {
+            let event = event.clone();
+            thread::spawn(move || {
+                block_on(async move {
+                    event
+                        .wait_until(|| {
+                            if SIGNAL.load(Ordering::Relaxed) {
+                                Some(())
+                            } else {
+                                None
+                            }
+                        })
+                        .await;
+
+                    assert!(SIGNAL.load(Ordering::Relaxed));
+                })
+            })
+        };
+
+        SIGNAL.store(true, Ordering::Relaxed);
+        event.notify_one();
+
+        th_recv.join().unwrap();
+    }
+
+    #[test]
+    fn one_to_many() {
+        const RECEIVER_COUNT: usize = 4;
+        static SIGNAL: AtomicBool = AtomicBool::new(false);
+
+        let event = Arc::new(Event::new());
+
+        let th_recv: Vec<_> = (0..RECEIVER_COUNT)
+            .map(|_| {
+                let event = event.clone();
+                thread::spawn(move || {
+                    block_on(async move {
+                        event
+                            .wait_until(|| {
+                                if SIGNAL.load(Ordering::Relaxed) {
+                                    Some(())
+                                } else {
+                                    None
+                                }
+                            })
+                            .await;
+
+                        assert!(SIGNAL.load(Ordering::Relaxed));
+                    })
+                })
+            })
+            .collect();
+
+        SIGNAL.store(true, Ordering::Relaxed);
+        event.notify_one();
+        event.notify(3);
+
+        for th in th_recv {
+            th.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn many_to_many() {
+        const TOKEN_COUNT: usize = 4;
+        static AVAILABLE_TOKENS: AtomicUsize = AtomicUsize::new(0);
+
+        let event = Arc::new(Event::new());
+
+        // Receive tokens from multiple threads.
+        let th_recv: Vec<_> = (0..TOKEN_COUNT)
+            .map(|_| {
+                let event = event.clone();
+                thread::spawn(move || {
+                    block_on(async move {
+                        event
+                            .wait_until(|| {
+                                AVAILABLE_TOKENS
+                                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| {
+                                        if t > 0 {
+                                            Some(t - 1)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .ok()
+                            })
+                            .await;
+                    })
+                })
+            })
+            .collect();
+
+        // Make tokens available from multiple threads.
+        let th_send: Vec<_> = (0..TOKEN_COUNT)
+            .map(|_| {
+                let event = event.clone();
+                thread::spawn(move || {
+                    AVAILABLE_TOKENS.fetch_add(1, Ordering::Relaxed);
+                    event.notify_one();
+                })
+            })
+            .collect();
+
+        for th in th_recv {
+            th.join().unwrap();
+        }
+        for th in th_send {
+            th.join().unwrap();
+        }
+
+        assert!(AVAILABLE_TOKENS.load(Ordering::Relaxed) == 0);
+    }
+
+    #[test]
+    fn notify_all() {
+        const RECEIVER_COUNT: usize = 4;
+        static SIGNAL: AtomicBool = AtomicBool::new(false);
+
+        let event = Arc::new(Event::new());
+
+        let th_recv: Vec<_> = (0..RECEIVER_COUNT)
+            .map(|_| {
+                let event = event.clone();
+                thread::spawn(move || {
+                    block_on(async move {
+                        event
+                            .wait_until(|| {
+                                if SIGNAL.load(Ordering::Relaxed) {
+                                    Some(())
+                                } else {
+                                    None
+                                }
+                            })
+                            .await;
+
+                        assert!(SIGNAL.load(Ordering::Relaxed));
+                    })
+                })
+            })
+            .collect();
+
+        SIGNAL.store(true, Ordering::Relaxed);
+        event.notify_all();
+
+        for th in th_recv {
+            th.join().unwrap();
+        }
+    }
+}
+
 /// Loom tests.
 #[cfg(all(test, async_event_loom))]
 mod tests {
@@ -833,7 +1013,7 @@ mod tests {
     }
 
     /// A simple counter that can be used to simulate the availability of a
-    /// certain number of tokens. In order to model the weakest possible
+    /// certain number of AVAILABLE_TOKENS. In order to model the weakest possible
     /// predicate from the viewpoint of atomic memory ordering, only Relaxed
     /// atomic operations are used.
     #[derive(Default)]
@@ -935,7 +1115,7 @@ mod tests {
         Cancelled,
     }
 
-    /// Make a certain amount of tokens available and notify as many waiters
+    /// Make a certain amount of AVAILABLE_TOKENS available and notify as many waiters
     /// among all registered waiters, possibly from several notifier threads.
     /// Optionally, it is possible to:
     /// - request that `max_spurious_wake` threads will simulate a spurious
@@ -1054,7 +1234,7 @@ mod tests {
                 })
                 .collect();
 
-            // The last notifier thread completes the number of tokens as
+            // The last notifier thread completes the number of AVAILABLE_TOKENS as
             // needed.
             for _ in 0..(token_count - (notifier_count - 1)) {
                 token_counter.increment();
@@ -1159,7 +1339,7 @@ mod tests {
         loom_notify(2, 2, 1, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
-    fn loom_two_consumers_three_tokens() {
+    fn loom_two_consumers_three_AVAILABLE_TOKENS() {
         const DEFAULT_PREEMPTION_BOUND: usize = 3;
         loom_notify(3, 2, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }
@@ -1199,7 +1379,7 @@ mod tests {
         loom_notify(3, 3, 1, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
-    fn loom_three_consumers_two_tokens() {
+    fn loom_three_consumers_two_AVAILABLE_TOKENS() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
         loom_notify(2, 3, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }

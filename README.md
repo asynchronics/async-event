@@ -3,8 +3,9 @@
 An efficient async condition variable for lock-free algorithms, a.k.a.
 "eventcount".
 
+[![Cargo](https://img.shields.io/crates/v/async-event.svg)](https://crates.io/crates/async-event)
+[![Documentation](https://docs.rs/async-event/badge.svg)](https://docs.rs/async-event)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](https://github.com/asynchronics/async-event#license)
-
 
 ## Overview
 
@@ -28,10 +29,6 @@ instead the [Diatomic Waker][diatomic-waker] crate for extra performance.
 This library is an offshoot of [Asynchronix][asynchronix], an ongoing effort at
 a high performance asynchronous computation framework for system simulation. It
 is also used in the [Tachyonix][tachyonix] MPSC channel.
-
-[![Cargo](https://img.shields.io/crates/v/async-event.svg)](https://crates.io/crates/async-event)
-[![Documentation](https://docs.rs/async-event/badge.svg)](https://docs.rs/async-event)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](https://github.com/asynchronics/async-event#license)
 
 [event_listener]: https://docs.rs/event_listener/latest/event_listener/
 [eventcount]: https://www.1024cores.net/home/lock-free-algorithms/eventcounts

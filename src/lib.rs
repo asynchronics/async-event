@@ -8,12 +8,12 @@
 //! receives a notification.
 //!
 //! While functionally similar to the [event_listener] crate, this
-//! implementation is limited to the `async` case but tries to be more efficient
-//! by limiting the number of locking operations on the mutex-protected list of
-//! notifiers: the lock is typically taken only once for each time a waiter is
-//! blocked and once for notifying, thus reducing the need for synchronization
-//! operations. Finally, spurious wake-ups are only generated in very rare
-//! circumstances.
+//! implementation is more opinionated and limited to the `async` case. It
+//! strives to be more efficient, however, by limiting the amount of locking
+//! operations on the mutex-protected list of notifiers: the lock is typically
+//! taken only once for each time a waiter is blocked and once for notifying,
+//! thus reducing the need for synchronization operations. Finally, spurious
+//! wake-ups are only generated in very rare circumstances.
 //!
 //! This library is an offshoot of [Asynchronix][asynchronix], an ongoing effort
 //! at a high performance asynchronous computation framework for system
@@ -26,89 +26,47 @@
 //!
 //! # Examples
 //!
-//! A multi-producer, multi-consumer channel of capacity 1 for sending
-//! `NonZeroUsize` values:
+//! Wait until a non-zero value has been sent asynchronously.
 //!
 //! ```
-//! use std::num::NonZeroUsize;
 //! use std::sync::atomic::{AtomicUsize, Ordering};
 //! use std::sync::Arc;
+//! use std::thread;
+//!
+//! use futures_executor::block_on;
 //!
 //! use async_event::Event;
 //!
-//! // Data stored by the channel.
-//! struct Inner {
-//!     sender_notifier: Event,
-//!     receiver_notifier: Event,
-//!     value: AtomicUsize,
-//! }
 //!
-//! // The sending side of the channel.
-//! #[derive(Clone)]
-//! struct Sender {
-//!     inner: Arc<Inner>,
-//! }
+//! let value = Arc::new(AtomicUsize::new(0));
+//! let event = Arc::new(Event::new());
 //!
-//! // The receiving side of the channel.
-//! #[derive(Clone)]
-//! struct Receiver {
-//!     inner: Arc<Inner>,
-//! }
+//! // Set a non-zero value concurrently.
+//! thread::spawn({
+//!     let value = value.clone();
+//!     let event = event.clone();
 //!
-//! // Creates an empty channel.
-//! fn channel() -> (Sender, Receiver) {
-//!     let inner = Arc::new(Inner {
-//!         sender_notifier: Event::new(),
-//!         receiver_notifier: Event::new(),
-//!         value: AtomicUsize::new(0),
-//!     });
-//!     (
-//!         Sender {
-//!             inner: inner.clone(),
-//!         },
-//!         Receiver { inner },
-//!     )
-//! }
-//!
-//! impl Sender {
-//!     // Sends a value asynchronously.
-//!     async fn send(&self, value: NonZeroUsize) {
-//!         // Wait until the predicate returns `Some`, i.e. until the atomic value
-//!         // is found to be zero (empty channel) and the new value is set.
-//!         self.inner
-//!             .sender_notifier
-//!             .wait_until(|| {
-//!                 self.inner
-//!                     .value
-//!                     .compare_exchange(0, value.get(), Ordering::Relaxed, Ordering::Relaxed)
-//!                     .ok()
-//!             })
-//!             .await;
-//!
-//!         // Let one of the blocked receivers (if any) know that a value is
-//!         // available.
-//!         self.inner.receiver_notifier.notify(1);
+//!     move || {
+//!         // A relaxed store is sufficient here: `Event::notify*` methods insert
+//!         // atomic fences to warrant adequate synchronization.
+//!         value.store(42, Ordering::Relaxed);
+//!         event.notify_one();
 //!     }
-//! }
+//! });
 //!
-//! impl Receiver {
-//!     // Receives a value asynchronously.
-//!     async fn recv(&self) -> NonZeroUsize {
-//!         // Wait until the predicate returns `Some(value)`, i.e. when the atomic
-//!         // value becomes non-zero (the channel contains an actual value).
-//!         let value = self
-//!             .inner
-//!             .receiver_notifier
-//!             .wait_until(|| NonZeroUsize::new(self.inner.value.swap(0, Ordering::Relaxed)))
-//!             .await;
+//! // Wait until the value is set.
+//! block_on(async move {
+//!     let v = event
+//!         .wait_until(|| {
+//!             // A relaxed load is sufficient here: `Event::wait_until` inserts
+//!             // atomic fences to warrant adequate synchronization.
+//!             let v = value.load(Ordering::Relaxed);
+//!             if v != 0 { Some(v) } else { None }
+//!         })
+//!         .await;
 //!
-//!         // Let one of the blocked senders (if any) know that the value slot is
-//!         // empty.
-//!         self.inner.sender_notifier.notify(1);
-//!
-//!         value
-//!     }
-//! }
+//!      assert_eq!(v, 42);
+//! });
 //! ```
 
 mod loom_exports;
@@ -1379,7 +1337,7 @@ mod tests {
         loom_notify(3, 3, 1, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
-    fn loom_three_consumers_two_AVAILABLE_TOKENS() {
+    fn loom_three_consumers_two_tokens() {
         const DEFAULT_PREEMPTION_BOUND: usize = 2;
         loom_notify(2, 3, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }

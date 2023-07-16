@@ -5,7 +5,7 @@ name = "async-event"
 # - Update CHANGELOG.md
 # - Update if necessary copyright notice in LICENSE-MIT
 # - Create a "vX.Y.Z" git tag
-version = "0.1.0-pre1"
+version = "0.1.0-rc1"
 authors = ["Serge Barral <serge.barral@asynchronics.com>"]
 edition = "2021"
 rust-version = "1.56"
@@ -19,8 +19,11 @@ categories = ["asynchronous", "concurrency"]
 keywords = ["async", "event", "atomic", "futures"]
 
 [dev-dependencies]
+tokio = { version = "1", features = ["full"] }
 futures-executor = "0.3"
 
 [target.'cfg(async_event_loom)'.dependencies]
-waker-fn = "1.1"
 loom = "0.5"
+
+[target.'cfg(async_event_loom)'.dev-dependencies]
+waker-fn = "1.1"

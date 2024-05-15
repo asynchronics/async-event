@@ -69,6 +69,12 @@
 //! });
 //! ```
 
+// Temporary workaround until the `async_event_loom` flag can be whitelisted
+// without a `build.rs` [1].
+//
+// [1]: (https://github.com/rust-lang/rust/issues/124800).
+#![allow(unexpected_cfgs)]
+
 mod loom_exports;
 
 use std::future::Future;
@@ -81,6 +87,7 @@ use std::task::{Context, Poll, Waker};
 use loom_exports::cell::UnsafeCell;
 use loom_exports::sync::atomic::{self, AtomicBool};
 use loom_exports::sync::Mutex;
+use pin_project_lite::pin_project;
 
 /// An object that can receive or send notifications.
 pub struct Event {
@@ -130,8 +137,28 @@ impl Event {
 
     /// Returns a future that can be `await`ed until the provided predicate is
     /// satisfied.
-    pub fn wait_until<F: FnMut() -> Option<T>, T>(&self, predicate: F) -> WaitUntil<F, T> {
+    pub fn wait_until<F, T>(&self, predicate: F) -> WaitUntil<F, T>
+    where
+        F: FnMut() -> Option<T>,
+    {
         WaitUntil::new(&self.wait_set, predicate)
+    }
+
+    /// Returns a future that can be `await`ed until the provided predicate is
+    /// satisfied or until the provided future completes.
+    ///
+    /// The deadline is specified as a `Future` that is expected to resolves to
+    /// `()` after some duration, such as a `tokio::time::Sleep` future.
+    pub fn wait_until_or_timeout<F, T, D>(
+        &self,
+        predicate: F,
+        deadline: D,
+    ) -> WaitUntilOrTimeout<F, T, D>
+    where
+        F: FnMut() -> Option<T>,
+        D: Future<Output = ()>,
+    {
+        WaitUntilOrTimeout::new(&self.wait_set, predicate, deadline)
     }
 }
 
@@ -376,6 +403,53 @@ enum WaitUntilState {
     Idle,
     Polled(NonNull<Notifier>),
     Completed,
+}
+
+pin_project! {
+    /// A future that can be `await`ed until a predicate is satisfied or until a
+    /// deadline elapses.
+    pub struct WaitUntilOrTimeout<'a, F: FnMut() -> Option<T>, T, D: Future<Output = ()>> {
+        wait_until: WaitUntil<'a, F, T>,
+        #[pin]
+        deadline: D,
+    }
+}
+
+impl<'a, F, T, D> WaitUntilOrTimeout<'a, F, T, D>
+where
+    F: FnMut() -> Option<T>,
+    D: Future<Output = ()>,
+{
+    /// Creates a future associated with the specified event sink that can be
+    /// `await`ed until the specified predicate is satisfied, or until the
+    /// specified timeout future completes.
+    fn new(wait_set: &'a WaitSet, predicate: F, deadline: D) -> Self {
+        Self {
+            wait_until: WaitUntil::new(wait_set, predicate),
+            deadline,
+        }
+    }
+}
+
+impl<'a, F, T, D> Future for WaitUntilOrTimeout<'a, F, T, D>
+where
+    F: FnMut() -> Option<T>,
+    D: Future<Output = ()>,
+{
+    type Output = Option<T>;
+
+    #[inline]
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        if let Poll::Ready(value) = Pin::new(this.wait_until).poll(cx) {
+            Poll::Ready(Some(value))
+        } else if this.deadline.poll(cx).is_ready() {
+            Poll::Ready(None)
+        } else {
+            Poll::Pending
+        }
+    }
 }
 
 /// A set of notifiers.

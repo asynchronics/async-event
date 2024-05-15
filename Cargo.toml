@@ -8,7 +8,7 @@ name = "async-event"
 version = "0.1.0"
 authors = ["Serge Barral <serge.barral@asynchronics.com>"]
 edition = "2021"
-rust-version = "1.56"
+rust-version = "1.77"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/asynchronics/async-event"
 readme = "README.md"
@@ -17,6 +17,9 @@ An efficient async condition variable for lock-free algorithms.
 """
 categories = ["asynchronous", "concurrency"]
 keywords = ["async", "event", "atomic", "futures"]
+
+[dependencies]
+pin-project-lite = "0.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

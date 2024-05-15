@@ -42,7 +42,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-async-event = "0.1.0"
+async-event = "0.2.0"
 ```
 
 ## Differences with `event_listener`

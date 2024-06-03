@@ -9,23 +9,15 @@ env:
   RUSTFLAGS: -Dwarnings
 
 jobs:
-  check:
-    name: Check
+  check-msrv:
+    name: Check MSRV
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        rust:
-          - stable
-          - 1.77.1
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
 
       - name: Install toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@1.64.0
 
       - name: Run cargo check
         run: cargo check

@@ -8,7 +8,7 @@ name = "async-event"
 version = "0.2.0"
 authors = ["Serge Barral <serge.barral@asynchronics.com>"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.64"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/asynchronics/async-event"
 readme = "README.md"
@@ -22,7 +22,7 @@ keywords = ["async", "event", "atomic", "futures"]
 pin-project-lite = "0.2"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.0", features = ["full"] }
 futures-executor = "0.3"
 
 [target.'cfg(async_event_loom)'.dependencies]
@@ -30,3 +30,6 @@ loom = "0.5"
 
 [target.'cfg(async_event_loom)'.dev-dependencies]
 waker-fn = "1.1"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(async_event_loom)'] }

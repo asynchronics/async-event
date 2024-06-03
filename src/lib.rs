@@ -68,13 +68,6 @@
 //!      assert_eq!(v, 42);
 //! });
 //! ```
-
-// Temporary workaround until the `async_event_loom` flag can be whitelisted
-// without a `build.rs` [1].
-//
-// [1]: (https://github.com/rust-lang/rust/issues/124800).
-#![allow(unexpected_cfgs)]
-
 mod loom_exports;
 
 use std::future::Future;
@@ -1141,6 +1134,7 @@ mod tests {
     /// When the future is still in a `Polled` state, this future is moved into
     /// the enum so as to extend its lifetime and allow it to be further
     /// notified.
+    #[allow(dead_code)]
     enum FutureState {
         Completed,
         Polled(Pin<Box<WaitUntilClosure>>),
@@ -1371,7 +1365,7 @@ mod tests {
         loom_notify(2, 2, 1, 1, 1, true, DEFAULT_PREEMPTION_BOUND);
     }
     #[test]
-    fn loom_two_consumers_three_AVAILABLE_TOKENS() {
+    fn loom_two_consumers_three_tokens() {
         const DEFAULT_PREEMPTION_BOUND: usize = 3;
         loom_notify(3, 2, 1, 0, 0, false, DEFAULT_PREEMPTION_BOUND);
     }

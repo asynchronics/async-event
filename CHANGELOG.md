@@ -1,6 +1,9 @@
-# [Unreleased]
+# 0.2.1 (2024-06-03)
+
 * Add `unexpected_cfgs` flag in `Cargo.toml` and accordingly decrease MSRV to
-  1.64 (???).
+  1.64 ([#2]).
+
+[#2]: https://github.com/asynchronics/async-event/pull/2
 
 # 0.2.0 (2024-05-15)
 

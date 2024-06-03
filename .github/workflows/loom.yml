@@ -1,7 +1,9 @@
 name: Loom
 
 on:
-  workflow_dispatch:
+    pull_request:
+    push:
+      branches: [ main ]
 
 jobs:
   loom:

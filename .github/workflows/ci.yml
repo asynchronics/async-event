@@ -98,3 +98,7 @@ jobs:
 
       - name: Run cargo doc
         run: cargo doc --no-deps --document-private-items
+        env:
+            RUSTDOCFLAGS: -Dwarnings
+
+

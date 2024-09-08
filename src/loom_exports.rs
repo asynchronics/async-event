@@ -1,4 +1,4 @@
-#[cfg(async_event_loom)]
+#[cfg(all(test, async_event_loom))]
 #[allow(unused_imports)]
 pub(crate) mod sync {
     pub(crate) use loom::sync::Mutex;
@@ -7,7 +7,7 @@ pub(crate) mod sync {
         pub(crate) use loom::sync::atomic::{fence, AtomicBool};
     }
 }
-#[cfg(not(async_event_loom))]
+#[cfg(not(all(test, async_event_loom)))]
 #[allow(unused_imports)]
 pub(crate) mod sync {
     pub(crate) use std::sync::Mutex;
@@ -51,7 +51,7 @@ pub(crate) mod sync {
 pub(crate) mod cell {
     pub(crate) use loom::cell::UnsafeCell;
 }
-#[cfg(not(async_event_loom))]
+#[cfg(not(all(test, async_event_loom)))]
 pub(crate) mod cell {
     #[derive(Debug)]
     pub(crate) struct UnsafeCell<T>(std::cell::UnsafeCell<T>);

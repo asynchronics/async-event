@@ -464,7 +464,7 @@ impl WaitSet {
     unsafe fn insert(&self, notifier: NonNull<Notifier>) {
         let mut list = self.list.lock().unwrap();
 
-        #[cfg(any(debug_assertions, async_event_loom))]
+        #[cfg(any(debug_assertions, all(test, async_event_loom)))]
         if notifier.as_ref().in_wait_set.load(Ordering::Relaxed) {
             drop(list); // avoids poisoning the lock
             panic!("the notifier was already in the wait set");

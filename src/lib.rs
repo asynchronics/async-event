@@ -68,6 +68,8 @@
 //!      assert_eq!(v, 42);
 //! });
 //! ```
+#![warn(missing_docs, missing_debug_implementations, unreachable_pub)]
+
 mod loom_exports;
 
 use std::future::Future;
@@ -83,6 +85,7 @@ use loom_exports::sync::Mutex;
 use pin_project_lite::pin_project;
 
 /// An object that can receive or send notifications.
+#[derive(Debug)]
 pub struct Event {
     wait_set: WaitSet,
 }
@@ -220,6 +223,7 @@ unsafe impl Send for Notifier {}
 unsafe impl Sync for Notifier {}
 
 /// A future that can be `await`ed until a predicate is satisfied.
+#[derive(Debug)]
 pub struct WaitUntil<'a, F: FnMut() -> Option<T>, T> {
     state: WaitUntilState,
     predicate: F,
@@ -391,7 +395,7 @@ impl<'a, F: FnMut() -> Option<T>, T> Future for WaitUntil<'a, F, T> {
 }
 
 /// State of the `WaitUntil` future.
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum WaitUntilState {
     Idle,
     Polled(NonNull<Notifier>),
@@ -449,6 +453,7 @@ where
 ///
 /// The set wraps a Mutex-protected list of notifiers and manages a flag for
 /// fast assessment of list emptiness.
+#[derive(Debug)]
 struct WaitSet {
     list: Mutex<List>,
     is_empty: AtomicBool,
@@ -689,7 +694,7 @@ impl Default for WaitSet {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct List {
     front: Option<NonNull<Notifier>>,
     back: Option<NonNull<Notifier>>,
